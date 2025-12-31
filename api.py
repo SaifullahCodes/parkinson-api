@@ -9,21 +9,26 @@ import os
 
 app = FastAPI(title="Parkinson's Voice Detection API")
 
-# --- 1. CONFIGURATION ---
-# Use raw strings (r"...") for Windows paths
-MODEL_PATH = r"D:\ParkinsonsDetectionAudio\parkinsons_mfcc_model.h5"
+# --- 1. CONFIGURATION (CLOUD COMPATIBLE) ---
+# This finds the directory where api.py is running
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# This looks for the model file in the SAME folder as api.py
+MODEL_PATH = os.path.join(BASE_DIR, "parkinsons_mfcc_model.h5")
 
 # --- 2. LOAD MODEL ---
 print(f"Loading model from: {MODEL_PATH}")
+
 try:
     model = load_model(MODEL_PATH)
     print("✅ Model loaded successfully!")
 except Exception as e:
     print(f"❌ Error loading model: {e}")
-    exit()
+    # We don't exit here on cloud, just print error to logs
+    model = None
 
 # --- 3. EXACT SCALER VALUES (High Precision) ---
-# ⚠️ CRITICAL: These must match your training data exactly.
+# ⚠️ CRITICAL: Matches training data exactly.
 HARDCODED_MEAN = np.array([
     -233.23172052589382, 208.9925267215066, -69.96216482119941, -17.912778577080843, 0.9710564632231081, 
     -39.03255755380845, 13.329869740841552, 9.818470685097866, -26.96551459534487, 4.256489320346613, 
@@ -60,12 +65,13 @@ def extract_mfcc(file_path, n_mfcc=40, duration=5, offset=0.5):
 
 # --- 5. PREDICTION ---
 def predict_file(file_path):
+    if model is None:
+        return {"error": "Model not loaded"}
+
     # 1. Extract
     features = extract_mfcc(file_path)
     
     # 2. Normalize (Manual Calculation)
-    # Formula: (X - Mean) / Scale
-    # Handle scale=0 case to avoid division by zero
     safe_scale = np.where(HARDCODED_SCALE == 0, 1, HARDCODED_SCALE)
     features_normalized = (features - HARDCODED_MEAN) / safe_scale
     
@@ -103,4 +109,6 @@ async def predict_endpoint(file: UploadFile = File(...)):
 
 # --- 7. RUN SERVER ---
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Get port from environment variable (Required for Cloud)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
