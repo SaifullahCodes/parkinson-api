@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+numpy
+librosa
+tensorflow-cpu
+python-multipart
+h5py
