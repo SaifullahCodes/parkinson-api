@@ -9,10 +9,10 @@ import typing_extensions as typing
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# 1. NEW MODEL STRATEGY
-# Primary: Gemini 2.0 Flash (Newest, Fast)
-# Backup: Gemini 1.5 Pro (Slower but very smart, if 2.0 fails)
-MODELS = ["models/gemini-2.0-flash-exp", "models/gemini-1.5-pro"]
+# 1. MODEL STRATEGY (Updated for 2026)
+# Primary: Gemini 2.5 Flash (Requested)
+# Backup: Gemini 1.5 Flash (Very stable fallback)
+MODELS = ["models/gemini-2.5-flash", "models/gemini-1.5-flash"]
 current_model_index = 0
 
 # READ KEYS
@@ -27,7 +27,6 @@ API_KEYS = [key for key in API_KEYS if key]
 
 if not API_KEYS:
     print("⚠️ No Environment Variables found. Using hardcoded backup.")
-    # You can leave this empty or put a backup key for local testing
     API_KEYS = ["PASTE_YOUR_BACKUP_KEY_HERE"] 
 
 app = Flask(__name__)
@@ -68,7 +67,7 @@ def analyze_video_logic(video_path):
     # 2. Wait
     print("⏳ Waiting for processing...")
     while video_file.state.name == "PROCESSING":
-        time.sleep(2)
+        time.sleep(1) # Faster check for 2.5 model
         video_file = genai.get_file(video_file.name)
     
     if video_file.state.name == "FAILED":
@@ -134,7 +133,7 @@ def upload_file():
     if request.method == 'GET':
         return jsonify({
             "status": "Live", 
-            "service": "Parkinson Video API",
+            "service": "Parkinson Video API (Gemini 2.5)",
             "endpoints": ["/models"],
             "message": "Send a POST request with a 'file' to analyze."
         }), 200
@@ -160,7 +159,7 @@ def upload_file():
             
         return jsonify(result)
 
-# ✅ NEW DEBUG ROUTE: Shows exactly which models work!
+# ✅ DEBUG ROUTE
 @app.route('/models', methods=['GET'])
 def list_models():
     try:
