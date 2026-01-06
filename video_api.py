@@ -9,10 +9,13 @@ import typing_extensions as typing
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# TARGET MODEL
-TARGET_MODEL = "models/gemini-2.5-flash"
+# 1. NEW MODEL STRATEGY
+# Primary: Gemini 2.0 Flash (Newest, Fast)
+# Backup: Gemini 1.5 Pro (Slower but very smart, if 2.0 fails)
+MODELS = ["models/gemini-2.0-flash-exp", "models/gemini-1.5-pro"]
+current_model_index = 0
 
-# READ KEYS FROM RENDER SETTINGS (Environment Variables)
+# READ KEYS
 API_KEYS = [
     os.environ.get("API_KEY_1"),
     os.environ.get("API_KEY_2"),
@@ -20,15 +23,12 @@ API_KEYS = [
     os.environ.get("API_KEY_4"),
     os.environ.get("API_KEY_5")
 ]
-
-# Filter out empty keys
 API_KEYS = [key for key in API_KEYS if key]
 
 if not API_KEYS:
     print("⚠️ No Environment Variables found. Using hardcoded backup.")
     # You can leave this empty or put a backup key for local testing
     API_KEYS = ["PASTE_YOUR_BACKUP_KEY_HERE"] 
-# =============================================================
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -54,7 +54,7 @@ def switch_key():
     print(f"🔑 Limit hit. Switched to Key #{current_key_index + 1}")
 
 def analyze_video_logic(video_path):
-    global TARGET_MODEL 
+    global current_model_index
     print(f"🎬 Processing: {video_path}")
     
     # 1. Upload
@@ -83,9 +83,13 @@ def analyze_video_logic(video_path):
     reasoning (str), clinical_interpretation (str), recommendation (str).
     """
     
-    for attempt in range(10): 
+    # Try up to 20 times (Keys * Models)
+    for attempt in range(20): 
         try:
-            model = genai.GenerativeModel(model_name=TARGET_MODEL)
+            target_model = MODELS[current_model_index]
+            print(f"🤖 Attempt {attempt+1}: Using {target_model}")
+            
+            model = genai.GenerativeModel(model_name=target_model)
             result = model.generate_content(
                 [video_file, prompt],
                 generation_config=genai.GenerationConfig(
@@ -100,31 +104,42 @@ def analyze_video_logic(video_path):
 
         except Exception as e:
             error_msg = str(e)
-            if "429" in error_msg or "Quota" in error_msg:
+            print(f"⚠️ Error: {error_msg}")
+            
+            # CASE 1: LIMIT HIT -> Switch Key
+            if "429" in error_msg or "Quota" in error_msg or "503" in error_msg:
                 switch_key()
+                # If cycled all keys, switch MODEL
+                if attempt % len(API_KEYS) == (len(API_KEYS) - 1):
+                    current_model_index = (current_model_index + 1) % len(MODELS)
+                    print(f"🔄 Switching Model to: {MODELS[current_model_index]}")
                 time.sleep(1)
-            elif "404" in error_msg:
-                print(f"⚠️ Model {TARGET_MODEL} not found. Trying 1.5-flash...")
-                TARGET_MODEL = "models/gemini-1.5-flash"
+
+            # CASE 2: MODEL NOT FOUND -> Switch Model Immediately
+            elif "404" in error_msg or "not found" in error_msg.lower():
+                print(f"❌ Model {target_model} not found. Switching...")
+                current_model_index = (current_model_index + 1) % len(MODELS)
+            
             else:
                 return {"error": f"Analysis error: {error_msg}"}
 
-    return {"error": "All API keys exhausted."}
+    return {"error": "Server is busy. Please try again in 1 minute."}
 
 # =======================================================
-# 👇 CRITICAL FIX: Add 'GET' to methods list
+# 👇 ROUTES
 # =======================================================
 @app.route('/', methods=['GET', 'POST'])
 def upload_file():
-    # 1. Health Check (Allows Render to ping the server)
+    # 1. Health Check
     if request.method == 'GET':
         return jsonify({
             "status": "Live", 
-            "service": "Parkinson Video API", 
+            "service": "Parkinson Video API",
+            "endpoints": ["/models"],
             "message": "Send a POST request with a 'file' to analyze."
         }), 200
 
-    # 2. Existing Upload Logic (POST only)
+    # 2. Upload Logic
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400
     
@@ -144,6 +159,18 @@ def upload_file():
             except: pass
             
         return jsonify(result)
+
+# ✅ NEW DEBUG ROUTE: Shows exactly which models work!
+@app.route('/models', methods=['GET'])
+def list_models():
+    try:
+        model_list = []
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                model_list.append(m.name)
+        return jsonify({"available_models": model_list})
+    except Exception as e:
+        return jsonify({"error": str(e)})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
