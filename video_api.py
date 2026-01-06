@@ -21,12 +21,12 @@ API_KEYS = [
     os.environ.get("API_KEY_5")
 ]
 
-# Filter out empty keys (in case you only add 3 instead of 5)
+# Filter out empty keys
 API_KEYS = [key for key in API_KEYS if key]
 
 if not API_KEYS:
-    # Fallback for local testing if env vars are missing
     print("⚠️ No Environment Variables found. Using hardcoded backup.")
+    # You can leave this empty or put a backup key for local testing
     API_KEYS = ["PASTE_YOUR_BACKUP_KEY_HERE"] 
 # =============================================================
 
@@ -111,10 +111,23 @@ def analyze_video_logic(video_path):
 
     return {"error": "All API keys exhausted."}
 
-@app.route('/', methods=['POST'])
+# =======================================================
+# 👇 CRITICAL FIX: Add 'GET' to methods list
+# =======================================================
+@app.route('/', methods=['GET', 'POST'])
 def upload_file():
+    # 1. Health Check (Allows Render to ping the server)
+    if request.method == 'GET':
+        return jsonify({
+            "status": "Live", 
+            "service": "Parkinson Video API", 
+            "message": "Send a POST request with a 'file' to analyze."
+        }), 200
+
+    # 2. Existing Upload Logic (POST only)
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400
+    
     file = request.files['file']
     if file.filename == '':
         return jsonify({"error": "No selected file"}), 400
@@ -129,6 +142,7 @@ def upload_file():
         if os.path.exists(filepath):
             try: os.remove(filepath)
             except: pass
+            
         return jsonify(result)
 
 if __name__ == '__main__':
