@@ -14,7 +14,7 @@ app = FastAPI(title="Parkinson's Voice Detection API")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # This looks for the model file in the SAME folder as api.py
-MODEL_PATH = os.path.join(BASE_DIR, "parkinsons_mfcc_model.h5")
+MODEL_PATH = os.path.join(BASE_DIR, "parkinsons_audio_model.h5")
 
 # --- 2. LOAD MODEL ---
 print(f"Loading model from: {MODEL_PATH}")
@@ -113,3 +113,4 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
 
     uvicorn.run(app, host="0.0.0.0", port=port)
+
