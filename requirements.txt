@@ -5,3 +5,8 @@ librosa
 tensorflow-cpu
 python-multipart
 h5py
+flask
+gunicorn
+google-generativeai
+opencv-python-headless
+typing-extensions
